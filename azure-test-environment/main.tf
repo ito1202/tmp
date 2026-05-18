@@ -33,11 +33,13 @@ resource "azurerm_virtual_network" "main" {
   tags                = var.tags
 }
 
-resource "azurerm_subnet" "app" {
-  name                 = "subnet-app"
+# App Service の VNet Integration 用（アウトバウンド出口）
+# 委任が必要: FE・BE・Functions が同一 App Service Plan なのでこの Subnet を共用できる
+resource "azurerm_subnet" "integration" {
+  name                 = "subnet-integration"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.subnet_app_prefix]
+  address_prefixes     = [var.subnet_integration_prefix]
 
   delegation {
     name = "app-service-delegation"
@@ -46,6 +48,15 @@ resource "azurerm_subnet" "app" {
       actions = ["Microsoft.Network/virtualNetworks/subnets/action"]
     }
   }
+}
+
+# Private Endpoint 用（インバウンド受け口）
+# FE・BE・Functions・Foundry の PE をすべてここに置く
+resource "azurerm_subnet" "pe" {
+  name                 = "subnet-pe"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = [var.subnet_pe_prefix]
 }
 
 # GatewaySubnet: 名前は Azure の仕様で固定
@@ -90,8 +101,8 @@ resource "azurerm_network_security_group" "app" {
   }
 }
 
-resource "azurerm_subnet_network_security_group_association" "app" {
-  subnet_id                 = azurerm_subnet.app.id
+resource "azurerm_subnet_network_security_group_association" "pe" {
+  subnet_id                 = azurerm_subnet.pe.id
   network_security_group_id = azurerm_network_security_group.app.id
 }
 
@@ -162,7 +173,7 @@ resource "azurerm_linux_web_app" "frontend" {
 
 resource "azurerm_app_service_virtual_network_swift_connection" "frontend" {
   app_service_id = azurerm_linux_web_app.frontend.id
-  subnet_id      = azurerm_subnet.app.id
+  subnet_id      = azurerm_subnet.integration.id
 }
 
 # ============================================================
@@ -187,7 +198,7 @@ resource "azurerm_linux_web_app" "backend" {
 
 resource "azurerm_app_service_virtual_network_swift_connection" "backend" {
   app_service_id = azurerm_linux_web_app.backend.id
-  subnet_id      = azurerm_subnet.app.id
+  subnet_id      = azurerm_subnet.integration.id
 }
 
 # ============================================================
@@ -197,7 +208,7 @@ resource "azurerm_private_endpoint" "frontend" {
   name                = "pe-${var.app_service_fe_name}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
-  subnet_id           = azurerm_subnet.app.id
+  subnet_id           = azurerm_subnet.pe.id
   tags                = var.tags
 
   private_service_connection {
@@ -220,7 +231,7 @@ resource "azurerm_private_endpoint" "backend" {
   name                = "pe-${var.app_service_be_name}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
-  subnet_id           = azurerm_subnet.app.id
+  subnet_id           = azurerm_subnet.pe.id
   tags                = var.tags
 
   private_service_connection {

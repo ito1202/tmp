@@ -15,10 +15,16 @@ variable "vnet_address_space" {
   default     = "10.0.0.0/16"
 }
 
-variable "subnet_app_prefix" {
-  description = "App Service 用 Subnet のアドレス範囲"
+variable "subnet_integration_prefix" {
+  description = "VNet Integration 用 Subnet のアドレス範囲（App Service のアウトバウンド出口）"
   type        = string
   default     = "10.0.1.0/24"
+}
+
+variable "subnet_pe_prefix" {
+  description = "Private Endpoint 用 Subnet のアドレス範囲（App Service へのインバウンド受け口）"
+  type        = string
+  default     = "10.0.2.0/24"
 }
 
 variable "subnet_gateway_prefix" {
