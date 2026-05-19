@@ -59,6 +59,23 @@ resource "azurerm_subnet" "pe" {
   address_prefixes     = [var.subnet_pe_prefix]
 }
 
+# Functions（Flex Consumption）の VNet Integration 用（アウトバウンド出口）
+# App Service Plan と Plan が異なるため subnet-integration と共用不可
+resource "azurerm_subnet" "func_integration" {
+  name                 = "subnet-func-integration"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = [var.subnet_func_integration_prefix]
+
+  delegation {
+    name = "functions-delegation"
+    service_delegation {
+      name    = "Microsoft.Web/serverFarms"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/action"]
+    }
+  }
+}
+
 # GatewaySubnet: 名前は Azure の仕様で固定
 resource "azurerm_subnet" "gateway" {
   name                 = "GatewaySubnet"
@@ -262,4 +279,167 @@ resource "azurerm_private_dns_zone_virtual_network_link" "app_service" {
   private_dns_zone_name = azurerm_private_dns_zone.app_service.name
   virtual_network_id    = azurerm_virtual_network.main.id
   tags                  = var.tags
+}
+
+# ============================================================
+# Storage Account（RAG 用ファイル置き場）
+# ============================================================
+resource "azurerm_storage_account" "main" {
+  name                          = var.storage_account_name
+  resource_group_name           = azurerm_resource_group.main.name
+  location                      = azurerm_resource_group.main.location
+  account_tier                  = "Standard"
+  account_replication_type      = "LRS"
+  public_network_access_enabled = false
+  tags                          = var.tags
+}
+
+resource "azurerm_private_endpoint" "storage" {
+  name                = "pe-${var.storage_account_name}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = azurerm_subnet.pe.id
+  tags                = var.tags
+
+  private_service_connection {
+    name                           = "psc-${var.storage_account_name}"
+    private_connection_resource_id = azurerm_storage_account.main.id
+    subresource_names              = ["blob"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "dns-group-storage"
+    private_dns_zone_ids = [azurerm_private_dns_zone.storage_blob.id]
+  }
+}
+
+resource "azurerm_private_dns_zone" "storage_blob" {
+  name                = "privatelink.blob.core.windows.net"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "storage_blob" {
+  name                  = "dns-link-storage-blob"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.storage_blob.name
+  virtual_network_id    = azurerm_virtual_network.main.id
+  tags                  = var.tags
+}
+
+# ============================================================
+# Azure AI Search（RAG インデックス・ベクトル検索）
+# ============================================================
+resource "azurerm_search_service" "main" {
+  name                          = var.ai_search_name
+  resource_group_name           = azurerm_resource_group.main.name
+  location                      = azurerm_resource_group.main.location
+  sku                           = var.ai_search_sku
+  public_network_access_enabled = false
+  tags                          = var.tags
+
+  identity {
+    type = "SystemAssigned"
+  }
+}
+
+resource "azurerm_private_endpoint" "ai_search" {
+  name                = "pe-${var.ai_search_name}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = azurerm_subnet.pe.id
+  tags                = var.tags
+
+  private_service_connection {
+    name                           = "psc-${var.ai_search_name}"
+    private_connection_resource_id = azurerm_search_service.main.id
+    subresource_names              = ["searchService"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "dns-group-search"
+    private_dns_zone_ids = [azurerm_private_dns_zone.ai_search.id]
+  }
+}
+
+resource "azurerm_private_dns_zone" "ai_search" {
+  name                = "privatelink.search.windows.net"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "ai_search" {
+  name                  = "dns-link-search"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.ai_search.name
+  virtual_network_id    = azurerm_virtual_network.main.id
+  tags                  = var.tags
+}
+
+# ============================================================
+# Azure Functions（Flex Consumption / RAG ツール）
+# ============================================================
+resource "azurerm_storage_account" "functions" {
+  name                          = "${var.storage_account_name}func"
+  resource_group_name           = azurerm_resource_group.main.name
+  location                      = azurerm_resource_group.main.location
+  account_tier                  = "Standard"
+  account_replication_type      = "LRS"
+  public_network_access_enabled = false
+  tags                          = var.tags
+}
+
+resource "azurerm_linux_function_app" "main" {
+  name                          = var.functions_app_name
+  resource_group_name           = azurerm_resource_group.main.name
+  location                      = azurerm_resource_group.main.location
+  storage_account_name          = azurerm_storage_account.functions.name
+  storage_account_access_key    = azurerm_storage_account.functions.primary_access_key
+  public_network_access_enabled = false
+  tags                          = var.tags
+
+  # Flex Consumption Plan
+  service_plan_id = azurerm_service_plan.functions.id
+
+  site_config {}
+
+  identity {
+    type = "SystemAssigned"
+  }
+}
+
+resource "azurerm_service_plan" "functions" {
+  name                = "asp-functions"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  os_type             = "Linux"
+  sku_name            = "FC1" # Flex Consumption
+  tags                = var.tags
+}
+
+resource "azurerm_app_service_virtual_network_swift_connection" "functions" {
+  app_service_id = azurerm_linux_function_app.main.id
+  subnet_id      = azurerm_subnet.func_integration.id
+}
+
+resource "azurerm_private_endpoint" "functions" {
+  name                = "pe-${var.functions_app_name}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = azurerm_subnet.pe.id
+  tags                = var.tags
+
+  private_service_connection {
+    name                           = "psc-${var.functions_app_name}"
+    private_connection_resource_id = azurerm_linux_function_app.main.id
+    subresource_names              = ["sites"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "dns-group-functions"
+    private_dns_zone_ids = [azurerm_private_dns_zone.app_service.id]
+  }
 }

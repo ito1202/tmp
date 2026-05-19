@@ -27,6 +27,12 @@ variable "subnet_pe_prefix" {
   default     = "10.0.2.0/24"
 }
 
+variable "subnet_func_integration_prefix" {
+  description = "Functions（Flex Consumption）VNet Integration 用 Subnet のアドレス範囲"
+  type        = string
+  default     = "10.0.4.0/24"
+}
+
 variable "subnet_gateway_prefix" {
   description = "VPN Gateway 用 Subnet のアドレス範囲（名前は GatewaySubnet 固定）"
   type        = string
@@ -52,6 +58,27 @@ variable "app_service_fe_name" {
 variable "app_service_be_name" {
   description = "Backend App Service 名（Azure 全体でユニークである必要あり）"
   type        = string
+}
+
+variable "functions_app_name" {
+  description = "Azure Functions 名（Azure 全体でユニークである必要あり）"
+  type        = string
+}
+
+variable "storage_account_name" {
+  description = "Storage Account 名（Azure 全体でユニーク・小文字英数字のみ・24文字以内）"
+  type        = string
+}
+
+variable "ai_search_name" {
+  description = "Azure AI Search 名（Azure 全体でユニークである必要あり）"
+  type        = string
+}
+
+variable "ai_search_sku" {
+  description = "Azure AI Search の SKU（basic / standard / standard2）"
+  type        = string
+  default     = "basic"
 }
 
 variable "vpn_gateway_sku" {

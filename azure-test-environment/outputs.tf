@@ -32,3 +32,18 @@ output "backend_private_ip" {
   description = "Backend Private Endpoint の IP"
   value       = azurerm_private_endpoint.backend.private_service_connection[0].private_ip_address
 }
+
+output "functions_principal_id" {
+  description = "Functions マネージドID の Principal ID（AI Search / Storage へのロール付与に使用）"
+  value       = azurerm_linux_function_app.main.identity[0].principal_id
+}
+
+output "ai_search_principal_id" {
+  description = "AI Search マネージドID の Principal ID（Storage へのロール付与に使用）"
+  value       = azurerm_search_service.main.identity[0].principal_id
+}
+
+output "storage_account_name" {
+  description = "Storage Account 名（RAG ファイルアップロード先）"
+  value       = azurerm_storage_account.main.name
+}
