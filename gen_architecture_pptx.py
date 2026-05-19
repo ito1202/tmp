@@ -1,293 +1,296 @@
 from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
+from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
-from pptx.util import Inches, Pt
-import pptx.oxml.ns as nsmap
-from lxml import etree
 
-# ============================================================
-# カラーパレット（Azure ブルー系）
-# ============================================================
-C_AZURE_BLUE   = RGBColor(0x00, 0x78, 0xD4)  # Azure ブランドカラー
-C_VNET_BG      = RGBColor(0xE8, 0xF4, 0xFD)  # VNet 背景
-C_SUBNET_BG    = RGBColor(0xD0, 0xE8, 0xF8)  # Subnet 背景
-C_ONPREM_BG    = RGBColor(0xF0, 0xF0, 0xF0)  # オンプレ背景
-C_AI_BG        = RGBColor(0xFD, 0xF0, 0xFF)  # AI サービス背景
-C_WHITE        = RGBColor(0xFF, 0xFF, 0xFF)
-C_DARK_TEXT    = RGBColor(0x1A, 0x1A, 0x1A)
-C_GRAY_TEXT    = RGBColor(0x60, 0x60, 0x60)
-C_ORANGE       = RGBColor(0xFF, 0x8C, 0x00)
-C_GREEN        = RGBColor(0x10, 0x7C, 0x10)
-C_BORDER       = RGBColor(0x00, 0x78, 0xD4)
+C_AZURE       = RGBColor(0x00, 0x78, 0xD4)
+C_VNET_BG     = RGBColor(0xE3, 0xF2, 0xFD)
+C_GW_BG       = RGBColor(0xE8, 0xEA, 0xED)
+C_PE_BG       = RGBColor(0xB2, 0xDF, 0xDB)
+C_INT_BG      = RGBColor(0xB3, 0xD9, 0xF7)
+C_FUNC_BG     = RGBColor(0xC8, 0xE6, 0xC9)
+C_ONPREM_BG   = RGBColor(0xF5, 0xF5, 0xF5)
+C_AI_BG       = RGBColor(0xF3, 0xE5, 0xF5)
+C_PE_BOX      = RGBColor(0xE0, 0xF7, 0xFA)
+C_WHITE       = RGBColor(0xFF, 0xFF, 0xFF)
+C_DARK        = RGBColor(0x1A, 0x1A, 0x1A)
+C_GRAY        = RGBColor(0x60, 0x60, 0x60)
+C_RED         = RGBColor(0xC6, 0x28, 0x28)
+C_GREEN       = RGBColor(0x1B, 0x5E, 0x20)
+C_PURPLE      = RGBColor(0x6A, 0x1A, 0x9A)
+C_ORANGE      = RGBColor(0xE6, 0x51, 0x00)
+C_GW_BORDER   = RGBColor(0x90, 0x90, 0x90)
+C_PE_BORDER   = RGBColor(0x00, 0x69, 0x5C)
+C_INT_BORDER  = RGBColor(0x01, 0x57, 0x9B)
+C_FUNC_BORDER = RGBColor(0x1B, 0x5E, 0x20)
 
-# ============================================================
-# ヘルパー
-# ============================================================
-def add_rect(slide, x, y, w, h, fill_rgb, border_rgb=None, border_pt=1.5, radius=False):
-    shape = slide.shapes.add_shape(
-        1,  # MSO_SHAPE_TYPE.RECTANGLE
-        Inches(x), Inches(y), Inches(w), Inches(h)
-    )
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = fill_rgb
-    if border_rgb:
-        shape.line.color.rgb = border_rgb
-        shape.line.width = Pt(border_pt)
-    else:
-        shape.line.fill.background()
-    return shape
-
-def add_textbox(slide, x, y, w, h, text, font_size=11, bold=False,
-                color=None, align=PP_ALIGN.CENTER, wrap=True):
-    txb = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-    txb.word_wrap = wrap
-    tf = txb.text_frame
-    tf.word_wrap = wrap
-    p = tf.paragraphs[0]
-    p.alignment = align
-    run = p.add_run()
-    run.text = text
-    run.font.size = Pt(font_size)
-    run.font.bold = bold
-    run.font.color.rgb = color if color else C_DARK_TEXT
-    return txb
-
-def add_labeled_box(slide, x, y, w, h, label, sublabel=None,
-                    fill=C_WHITE, border=C_BORDER, label_size=10, sub_size=8):
-    box = add_rect(slide, x, y, w, h, fill, border)
-    # ラベル
-    add_textbox(slide, x, y + 0.05, w, 0.25, label,
-                font_size=label_size, bold=True, color=C_DARK_TEXT)
-    if sublabel:
-        add_textbox(slide, x, y + 0.28, w, 0.2, sublabel,
-                    font_size=sub_size, color=C_GRAY_TEXT)
-    return box
-
-def add_arrow(slide, x1, y1, x2, y2):
-    """水平または垂直の矢印（connectorで近似）"""
-    from pptx.util import Inches
-    connector = slide.shapes.add_connector(
-        2,  # MSO_CONNECTOR_TYPE.STRAIGHT
-        Inches(x1), Inches(y1), Inches(x2), Inches(y2)
-    )
-    connector.line.color.rgb = C_AZURE_BLUE
-    connector.line.width = Pt(1.5)
-    return connector
-
-# ============================================================
-# プレゼンテーション作成
-# ============================================================
 prs = Presentation()
 prs.slide_width  = Inches(13.33)
 prs.slide_height = Inches(7.5)
 
+def rect(slide, x, y, w, h, fill, border=None, bw=1.5):
+    s = slide.shapes.add_shape(1, Inches(x), Inches(y), Inches(w), Inches(h))
+    s.fill.solid(); s.fill.fore_color.rgb = fill
+    if border:
+        s.line.color.rgb = border; s.line.width = Pt(bw)
+    else:
+        s.line.fill.background()
+    return s
+
+def txt(slide, x, y, w, h, text, size=9, bold=False,
+        color=None, align=PP_ALIGN.CENTER, wrap=True):
+    t = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+    t.word_wrap = wrap
+    tf = t.text_frame; tf.word_wrap = wrap
+    p = tf.paragraphs[0]; p.alignment = align
+    r = p.add_run(); r.text = text
+    r.font.size = Pt(size); r.font.bold = bold
+    r.font.color.rgb = color or C_DARK
+
+def box(slide, x, y, w, h, label, sub=None,
+        fill=C_WHITE, border=C_AZURE, ls=9, ss=7.5):
+    rect(slide, x, y, w, h, fill, border, 1.2)
+    txt(slide, x, y+0.04, w, 0.24, label, ls, True, C_DARK)
+    if sub:
+        txt(slide, x, y+0.27, w, 0.2, sub, ss, False, C_GRAY)
+
+def arrow(slide, x1, y1, x2, y2, color=C_AZURE, w=1.5):
+    c = slide.shapes.add_connector(2,
+        Inches(x1), Inches(y1), Inches(x2), Inches(y2))
+    c.line.color.rgb = color; c.line.width = Pt(w)
+
 # ============================================================
-# スライド 1: アーキテクチャ全体図
+# スライド 1: 全体アーキテクチャ
 # ============================================================
-slide1 = prs.slides.add_slide(prs.slide_layouts[6])  # 空白レイアウト
+s1 = prs.slides.add_slide(prs.slide_layouts[6])
+txt(s1, 0.2, 0.05, 12.9, 0.38,
+    "全体アーキテクチャ — リソースと Subnet の配置",
+    15, True, C_AZURE)
 
-# タイトル
-add_textbox(slide1, 0.2, 0.1, 12.9, 0.4,
-            "Azure 最小構成 — アーキテクチャ全体図",
-            font_size=16, bold=True, color=C_AZURE_BLUE)
+# オンプレ
+rect(s1, 0.15, 0.52, 1.85, 2.0, C_ONPREM_BG, C_GW_BORDER, 1.2)
+txt(s1, 0.15, 0.53, 1.85, 0.22, "オンプレミス", 8, True, C_GRAY)
+box(s1, 0.25, 0.82, 1.6, 0.52, "ユーザー PC", "ブラウザ",
+    fill=C_WHITE, border=C_GW_BORDER)
+box(s1, 0.25, 1.45, 1.6, 0.52, "VPN デバイス", "IPsec",
+    fill=C_WHITE, border=C_GW_BORDER)
 
-# ---- オンプレミスエリア ----
-add_rect(slide1, 0.2, 0.6, 2.0, 2.2, C_ONPREM_BG, RGBColor(0x80,0x80,0x80), 1.5)
-add_textbox(slide1, 0.2, 0.62, 2.0, 0.25, "オンプレミス",
-            font_size=9, bold=True, color=C_GRAY_TEXT)
-add_labeled_box(slide1, 0.35, 0.95, 1.7, 0.55,
-                "ユーザー PC", "ブラウザ", fill=C_WHITE, border=RGBColor(0x80,0x80,0x80))
-add_labeled_box(slide1, 0.35, 1.65, 1.7, 0.55,
-                "VPN デバイス", "IPsec", fill=C_WHITE, border=RGBColor(0x80,0x80,0x80))
-
-# ---- VPN Gateway ----
-add_labeled_box(slide1, 2.7, 1.1, 1.6, 0.7,
-                "VPN Gateway", "pip: output で確認",
-                fill=RGBColor(0xE0,0xF0,0xFF), border=C_AZURE_BLUE)
-
-# ---- VNet エリア ----
-add_rect(slide1, 4.7, 0.55, 5.5, 5.5, C_VNET_BG, C_AZURE_BLUE, 2.0)
-add_textbox(slide1, 4.7, 0.57, 5.5, 0.28,
-            "Virtual Network  10.0.0.0/16",
-            font_size=9, bold=True, color=C_AZURE_BLUE)
+# VNet 全体
+rect(s1, 2.2, 0.45, 8.15, 6.75, C_VNET_BG, C_AZURE, 2.2)
+txt(s1, 2.2, 0.47, 8.15, 0.25,
+    "Virtual Network  10.0.0.0/16", 9, True, C_AZURE)
 
 # GatewaySubnet
-add_rect(slide1, 4.9, 0.9, 2.4, 0.55,
-         RGBColor(0xC8,0xDC,0xF0), C_AZURE_BLUE, 1.0)
-add_textbox(slide1, 4.9, 0.92, 2.4, 0.2,
-            "GatewaySubnet  10.0.255.0/27",
-            font_size=8, bold=True, color=C_AZURE_BLUE)
+rect(s1, 2.38, 0.8, 2.3, 0.95, C_GW_BG, C_GW_BORDER, 1.2)
+txt(s1, 2.38, 0.82, 2.3, 0.22,
+    "GatewaySubnet  10.0.255.0/27", 7.5, True, C_GRAY)
+box(s1, 2.48, 1.1, 2.1, 0.52, "VPN Gateway", "",
+    fill=C_WHITE, border=C_GW_BORDER)
 
-# Subnet-app
-add_rect(slide1, 4.9, 1.6, 5.1, 4.2, C_SUBNET_BG, C_AZURE_BLUE, 1.0)
-add_textbox(slide1, 4.9, 1.62, 5.1, 0.22,
-            "subnet-app  10.0.1.0/24",
-            font_size=8, bold=True, color=C_AZURE_BLUE)
+# subnet-pe
+rect(s1, 2.38, 1.88, 2.3, 5.1, C_PE_BG, C_PE_BORDER, 1.5)
+txt(s1, 2.38, 1.9, 2.3, 0.22,
+    "subnet-pe  10.0.2.0/24", 7.5, True, C_PE_BORDER)
+txt(s1, 2.42, 2.13, 2.22, 0.2,
+    "Private Endpoint 置き場", 7, False, C_PE_BORDER)
 
-# NSG バッジ
-add_rect(slide1, 9.5, 1.62, 0.45, 0.22,
-         RGBColor(0xFF,0xC0,0x00), None)
-add_textbox(slide1, 9.5, 1.62, 0.45, 0.22, "NSG",
-            font_size=7, bold=True, color=C_DARK_TEXT)
+for i, (label, sub) in enumerate([
+    ("PE: Frontend", ""),
+    ("PE: Backend", ""),
+    ("PE: Functions", ""),
+    ("PE: Storage", ""),
+    ("PE: AI Search", ""),
+    ("PE: Foundry", ""),
+]):
+    box(s1, 2.45, 2.38 + i * 0.72, 2.15, 0.58,
+        label, sub, fill=C_PE_BOX, border=C_PE_BORDER, ls=8)
 
-# Private DNS Zone
-add_rect(slide1, 5.05, 1.9, 4.8, 0.45,
-         RGBColor(0xD8,0xF0,0xE8), RGBColor(0x10,0x7C,0x10), 1.0)
-add_textbox(slide1, 5.05, 1.92, 4.8, 0.2,
-            "Private DNS Zone  privatelink.azurewebsites.net",
-            font_size=8, color=C_GREEN)
+# subnet-integration
+rect(s1, 4.85, 1.88, 2.5, 2.5, C_INT_BG, C_INT_BORDER, 1.5)
+txt(s1, 4.85, 1.9, 2.5, 0.22,
+    "subnet-integration  10.0.1.0/24", 7.5, True, C_INT_BORDER)
+txt(s1, 4.9, 2.13, 2.4, 0.2,
+    "App Service VNet Integration（出口）", 7, False, C_INT_BORDER)
 
-# Frontend App Service
-add_labeled_box(slide1, 5.05, 2.5, 2.2, 0.8,
-                "App Service (Frontend)", "assistant-ui / Node",
-                fill=C_WHITE, border=C_AZURE_BLUE)
-add_rect(slide1, 5.05, 3.35, 2.2, 0.35, RGBColor(0xE8,0xF8,0xFF), C_AZURE_BLUE, 0.8)
-add_textbox(slide1, 5.05, 3.37, 2.2, 0.22,
-            "Private Endpoint", font_size=7, color=C_AZURE_BLUE)
+box(s1, 4.93, 2.38, 2.3, 0.65, "App Service", "Frontend / assistant-ui",
+    fill=C_WHITE, border=C_AZURE)
+box(s1, 4.93, 3.12, 2.3, 0.65, "App Service", "Backend / FastAPI",
+    fill=C_WHITE, border=C_AZURE)
 
-# Backend App Service
-add_labeled_box(slide1, 5.05, 3.9, 2.2, 0.8,
-                "App Service (Backend)", "FastAPI / Python",
-                fill=C_WHITE, border=C_AZURE_BLUE)
-add_rect(slide1, 5.05, 4.75, 2.2, 0.35, RGBColor(0xE8,0xF8,0xFF), C_AZURE_BLUE, 0.8)
-add_textbox(slide1, 5.05, 4.77, 2.2, 0.22,
-            "Private Endpoint", font_size=7, color=C_AZURE_BLUE)
+# Managed ID バッジ
+rect(s1, 4.93, 3.83, 1.1, 0.22, RGBColor(0xE8,0xF5,0xE9), C_GREEN, 0.8)
+txt(s1, 4.93, 3.84, 1.1, 0.2, "Managed ID", 7, True, C_GREEN)
+rect(s1, 4.93, 3.12+0.65+0.06, 1.1, 0.22, RGBColor(0xE8,0xF5,0xE9), C_GREEN, 0.8)
 
-# Managed ID バッジ（Frontend）
-add_rect(slide1, 7.3, 2.6, 0.9, 0.22,
-         RGBColor(0xC0,0xFF,0xC0), None)
-add_textbox(slide1, 7.3, 2.6, 0.9, 0.22,
-            "Managed ID", font_size=7, bold=True, color=C_GREEN)
+# subnet-func-integration
+rect(s1, 4.85, 4.55, 2.5, 1.65, C_FUNC_BG, C_FUNC_BORDER, 1.5)
+txt(s1, 4.85, 4.57, 2.5, 0.22,
+    "subnet-func-integration  10.0.4.0/24", 7.5, True, C_FUNC_BORDER)
+txt(s1, 4.9, 4.8, 2.4, 0.2,
+    "Functions VNet Integration（出口）", 7, False, C_FUNC_BORDER)
+box(s1, 4.93, 5.05, 2.3, 0.65, "Azure Functions", "Flex Consumption / RAG",
+    fill=C_WHITE, border=C_FUNC_BORDER)
+rect(s1, 4.93, 5.76, 1.1, 0.22, RGBColor(0xE8,0xF5,0xE9), C_GREEN, 0.8)
+txt(s1, 4.93, 5.77, 1.1, 0.2, "Managed ID", 7, True, C_GREEN)
 
-# Managed ID バッジ（Backend）
-add_rect(slide1, 7.3, 4.0, 0.9, 0.22,
-         RGBColor(0xC0,0xFF,0xC0), None)
-add_textbox(slide1, 7.3, 4.0, 0.9, 0.22,
-            "Managed ID", font_size=7, bold=True, color=C_GREEN)
+# Azure マネージドゾーン
+rect(s1, 7.55, 0.45, 3.9, 6.75, C_AI_BG, C_PURPLE, 1.5)
+txt(s1, 7.55, 0.47, 3.9, 0.25,
+    "Azure マネージドゾーン（VNet 外）", 8.5, True, C_PURPLE)
 
-# ---- AI サービスエリア ----
-add_rect(slide1, 10.5, 2.8, 2.5, 2.5, C_AI_BG, RGBColor(0x80,0x00,0x80), 1.5)
-add_textbox(slide1, 10.5, 2.82, 2.5, 0.25,
-            "Microsoft Foundry", font_size=9, bold=True,
-            color=RGBColor(0x60,0x00,0x60))
-add_labeled_box(slide1, 10.65, 3.1, 2.15, 0.55,
-                "GPT-5.2", "LLM",
-                fill=C_WHITE, border=RGBColor(0x80,0x00,0x80))
-add_labeled_box(slide1, 10.65, 3.8, 2.15, 0.55,
-                "Embedding 003", "埋め込みモデル",
-                fill=C_WHITE, border=RGBColor(0x80,0x00,0x80))
-add_labeled_box(slide1, 10.65, 4.5, 2.15, 0.55,
-                "Foundry Agent", "agent-parent",
-                fill=C_WHITE, border=RGBColor(0x80,0x00,0x80))
+box(s1, 7.7, 0.82, 3.6, 0.65, "Storage Account", "RAG 用 blob",
+    fill=C_WHITE, border=C_AZURE)
+box(s1, 7.7, 1.58, 3.6, 0.65, "Azure AI Search", "ベクトル検索 / RAG",
+    fill=C_WHITE, border=C_AZURE)
+box(s1, 7.7, 2.34, 3.6, 0.65, "App Service Frontend", "Public 無効",
+    fill=C_WHITE, border=C_AZURE)
+box(s1, 7.7, 3.1, 3.6, 0.65, "App Service Backend", "Public 無効",
+    fill=C_WHITE, border=C_AZURE)
+box(s1, 7.7, 3.86, 3.6, 0.65, "Azure Functions", "Public 無効",
+    fill=C_WHITE, border=C_FUNC_BORDER)
 
-# ---- 矢印 ----
-# ユーザー → VPN デバイス
-add_arrow(slide1, 1.2, 1.65, 1.2, 1.92)
-# VPN デバイス → VPN Gateway
-add_arrow(slide1, 2.05, 1.92, 2.7, 1.45)
-# VPN Gateway → GatewaySubnet
-add_arrow(slide1, 4.3, 1.45, 4.9, 1.17)
-# Frontend → Backend
-add_arrow(slide1, 6.15, 3.3, 6.15, 3.9)
-# Backend → AI
-add_arrow(slide1, 7.25, 4.3, 10.5, 3.85)
+rect(s1, 7.7, 4.62, 3.6, 2.3, RGBColor(0xEE,0xE0,0xF8), C_PURPLE, 1.2)
+txt(s1, 7.7, 4.64, 3.6, 0.24, "Azure AI Foundry", 8.5, True, C_PURPLE)
+box(s1, 7.8, 4.94, 1.65, 0.52, "親エージェント", "", fill=C_WHITE, border=C_PURPLE)
+box(s1, 9.55, 4.94, 1.65, 0.52, "子エージェント", "", fill=C_WHITE, border=C_PURPLE)
+box(s1, 7.8, 5.55, 1.65, 0.52, "GPT-5.2", "LLM", fill=C_WHITE, border=C_PURPLE)
+box(s1, 9.55, 5.55, 1.65, 0.52, "Embedding 003", "", fill=C_WHITE, border=C_PURPLE)
 
-# ---- 凡例 ----
-add_textbox(slide1, 0.2, 5.5, 12.9, 0.25,
-            "※ Public Network Access: Disabled（社外から DNS 解決不可・接続不可）",
-            font_size=8, color=RGBColor(0xC0,0x00,0x00))
+# Log Analytics（右下）
+rect(s1, 7.7, 7.0, 3.6, 0.38, RGBColor(0xFF, 0xF8, 0xE1), RGBColor(0xF5,0x7F,0x17), 1.0)
+txt(s1, 7.7, 7.01, 3.6, 0.3,
+    "Log Analytics Workspace（監視）", 8, True, RGBColor(0xE6,0x51,0x00))
+
+# 矢印
+arrow(s1, 2.0, 1.71, 2.38, 1.35)   # VPN デバイス → VPN GW
+arrow(s1, 2.58, 1.62, 2.58, 1.88)   # GW → subnet-pe
+arrow(s1, 4.6, 2.68, 4.85, 2.68)    # PE:FE → App Service FE
+arrow(s1, 4.6, 3.44, 4.85, 3.44)    # PE:BE → App Service BE
+arrow(s1, 4.6, 4.2, 4.85, 5.37)     # PE:Func → Functions
+arrow(s1, 7.35, 1.11, 7.55, 1.11)   # PE:Storage → Storage
+arrow(s1, 7.35, 1.87, 7.55, 1.87)   # PE:Search → AI Search
+arrow(s1, 7.35, 4.86, 7.55, 4.9)    # PE:Foundry → Foundry
+
+# Public 無効バッジ
+for yr in [2.5, 3.26, 4.02]:
+    rect(s1, 10.8, yr+0.15, 0.6, 0.22, C_RED, None)
+    txt(s1, 10.8, yr+0.16, 0.6, 0.2, "PUB×", 6.5, True, C_WHITE)
+
+txt(s1, 0.15, 7.25, 13.0, 0.22,
+    "※ App Service / Functions は Public Endpoint 無効 — 社外から DNS 解決不可・接続不可",
+    8, False, C_RED)
 
 # ============================================================
-# スライド 2: ネットワーク設計（アドレス一覧）
+# スライド 2: Subnet 役割と Private Endpoint 一覧
 # ============================================================
-slide2 = prs.slides.add_slide(prs.slide_layouts[6])
+s2 = prs.slides.add_slide(prs.slide_layouts[6])
+txt(s2, 0.2, 0.05, 12.9, 0.38,
+    "Subnet の役割と Private Endpoint 一覧",
+    15, True, C_AZURE)
 
-add_textbox(slide2, 0.2, 0.1, 12.9, 0.4,
-            "ネットワーク設計 — アドレス・リソース一覧",
-            font_size=16, bold=True, color=C_AZURE_BLUE)
-
-# テーブル風に手動描画
-headers = ["カテゴリ", "リソース名", "設定値", "備考"]
-rows = [
-    ["VNet",       "vnet-rg-azure-test",      "10.0.0.0/16",          "リージョン: Japan East"],
-    ["Subnet",     "GatewaySubnet",            "10.0.255.0/27",        "VPN Gateway 専用（名前固定）"],
-    ["Subnet",     "subnet-app",               "10.0.1.0/24",          "App Service 用"],
-    ["NSG",        "nsg-app",                  "Inbound 許可: 443",    "送信元: オンプレIP（tfvars 参照）"],
-    ["VPN GW",     "vpngw-main",               "SKU: VpnGw1",          "Public IP は output で確認"],
-    ["App Service","app-fe-test",              "B1 / Linux",           "Frontend（Public 無効）"],
-    ["App Service","app-be-test",              "B1 / Linux",           "Backend（Public 無効）"],
-    ["PE",         "pe-app-fe-test",           "subnet-app に配置",    "Frontend Private Endpoint"],
-    ["PE",         "pe-app-be-test",           "subnet-app に配置",    "Backend Private Endpoint"],
-    ["DNS Zone",   "privatelink.azurewebsites.net", "VNet リンク済み", "VNet 内の名前解決"],
+# Subnet 表
+sub_headers = ["Subnet 名", "アドレス", "役割", "委任", "中に置くもの"]
+sub_rows = [
+    ("GatewaySubnet",           "10.0.255.0/27", "VPN Gateway 専用（名前固定）",             "なし",                       "VPN Gateway のみ"),
+    ("subnet-pe",               "10.0.2.0/24",   "外→リソースへの入口\n（インバウンド受け口）", "なし",                       "Private Endpoint 全て"),
+    ("subnet-integration",      "10.0.1.0/24",   "App Service→VNet の出口\n（アウトバウンド）", "Microsoft.Web/serverFarms",  "App Service FE / BE"),
+    ("subnet-func-integration", "10.0.4.0/24",   "Functions→VNet の出口\n（アウトバウンド）",  "Microsoft.App/environments", "Azure Functions"),
 ]
+col_w = [2.3, 1.4, 2.6, 2.3, 2.4]
+col_x = [0.25, 2.6, 4.05, 6.7, 9.05]
+hdr_colors = [C_AZURE]*5
+row1 = 0.52
 
-col_x = [0.3, 1.8, 4.0, 6.8]
-col_w = [1.4, 2.1, 2.7, 5.8]
-row_h = 0.38
-header_y = 0.65
+for ci, (h, cx, cw) in enumerate(zip(sub_headers, col_x, col_w)):
+    rect(s2, cx, row1, cw, 0.35, C_AZURE, None)
+    txt(s2, cx, row1+0.05, cw, 0.28, h, 9, True, C_WHITE)
 
-# ヘッダー行
-for i, (hx, hw, ht) in enumerate(zip(col_x, col_w, headers)):
-    add_rect(slide2, hx, header_y, hw, row_h,
-             C_AZURE_BLUE, None)
-    add_textbox(slide2, hx, header_y + 0.05, hw, row_h - 0.1,
-                ht, font_size=10, bold=True, color=C_WHITE)
+row_colors = [C_GW_BG, C_PE_BG, C_INT_BG, C_FUNC_BG]
+row_borders = [C_GW_BORDER, C_PE_BORDER, C_INT_BORDER, C_FUNC_BORDER]
+for ri, (row, rc, rb) in enumerate(zip(sub_rows, row_colors, row_borders)):
+    y = row1 + 0.35 + ri * 0.62
+    for ci, (val, cx, cw) in enumerate(zip(row, col_x, col_w)):
+        rect(s2, cx, y, cw, 0.58, rc if ci == 0 else C_WHITE,
+             rb if ci == 0 else RGBColor(0xCC,0xCC,0xCC), 0.8)
+        txt(s2, cx+0.05, y+0.04, cw-0.1, 0.52, val, 8.5,
+            ci == 0, rb if ci == 0 else C_DARK, PP_ALIGN.LEFT)
 
-# データ行
-for ri, row in enumerate(rows):
-    y = header_y + row_h * (ri + 1)
-    bg = C_WHITE if ri % 2 == 0 else RGBColor(0xF5, 0xF8, 0xFF)
-    for ci, (cx, cw, cell) in enumerate(zip(col_x, col_w, row)):
-        add_rect(slide2, cx, y, cw, row_h, bg, RGBColor(0xCC,0xCC,0xCC), 0.5)
-        add_textbox(slide2, cx + 0.05, y + 0.05, cw - 0.1, row_h - 0.1,
-                    cell, font_size=9, color=C_DARK_TEXT, align=PP_ALIGN.LEFT)
+# PE 表
+txt(s2, 0.25, 3.15, 12.7, 0.3,
+    "Private Endpoint 一覧（全て subnet-pe に配置）",
+    10, True, C_PE_BORDER)
 
-add_textbox(slide2, 0.3, 6.9, 12.0, 0.25,
-            "※ terraform.tfvars の allowed_ip_ranges にオンプレのグローバルIPを設定すること",
-            font_size=8, color=RGBColor(0xC0,0x00,0x00))
+pe_headers = ["PE 名", "接続先リソース", "Private DNS Zone", "備考"]
+pe_rows = [
+    ("PE: Frontend",  "App Service Frontend",  "privatelink.azurewebsites.net",       "Public 無効"),
+    ("PE: Backend",   "App Service Backend",   "privatelink.azurewebsites.net",       "Public 無効"),
+    ("PE: Functions", "Azure Functions",       "privatelink.azurewebsites.net",       "Public 無効 / Flex Consumption"),
+    ("PE: Storage",   "Storage Account",       "privatelink.blob.core.windows.net",   "blob サブリソース"),
+    ("PE: AI Search", "Azure AI Search",       "privatelink.search.windows.net",      "searchService サブリソース"),
+    ("PE: Foundry",   "Azure AI Foundry",      "privatelink.services.ai.azure.com",   "Hub・Project 各 1 個（TODO）"),
+]
+pe_col_w = [1.7, 2.5, 3.5, 3.9]
+pe_col_x = [0.25, 2.0, 4.55, 8.1]
+
+for ci, (h, cx, cw) in enumerate(zip(pe_headers, pe_col_x, pe_col_w)):
+    rect(s2, cx, 3.48, cw, 0.32, C_PE_BORDER, None)
+    txt(s2, cx, 3.5, cw, 0.28, h, 9, True, C_WHITE)
+
+for ri, row in enumerate(pe_rows):
+    y = 3.8 + ri * 0.5
+    bg = RGBColor(0xE0,0xF7,0xFA) if ri % 2 == 0 else C_WHITE
+    for ci, (val, cx, cw) in enumerate(zip(row, pe_col_x, pe_col_w)):
+        rect(s2, cx, y, cw, 0.46, bg,
+             RGBColor(0xCC,0xCC,0xCC), 0.6)
+        txt(s2, cx+0.05, y+0.04, cw-0.1, 0.38, val, 8.5,
+            False, C_DARK, PP_ALIGN.LEFT)
 
 # ============================================================
 # スライド 3: 通信フロー
 # ============================================================
-slide3 = prs.slides.add_slide(prs.slide_layouts[6])
+s3 = prs.slides.add_slide(prs.slide_layouts[6])
+txt(s3, 0.2, 0.05, 12.9, 0.38,
+    "通信フロー — チャット回答が返るまで",
+    15, True, C_AZURE)
 
-add_textbox(slide3, 0.2, 0.1, 12.9, 0.4,
-            "通信フロー",
-            font_size=16, bold=True, color=C_AZURE_BLUE)
-
-flows = [
-    ("1. ユーザー → Frontend",
-     "オンプレ PC  →  VPN（IPsec）  →  VPN Gateway  →  VNet  →  Private Endpoint  →  App Service Frontend",
-     "社外からは DNS 解決不可。VPN 接続済みオンプレからのみ到達可能。"),
-    ("2. Frontend → Backend",
-     "App Service Frontend  →  VNet 内通信（VNet Integration）  →  App Service Backend",
-     "同一 VNet 内の通信。インターネットを経由しない。"),
-    ("3. Backend → AI（マネージドID 認証）",
-     "App Service Backend  →  マネージドID で EntraID 認証  →  Foundry / Azure OpenAI",
-     "キー・シークレット不要。Backend の Principal ID に Cognitive Services User ロールを付与。"),
-    ("4. 社外からのアクセス（遮断）",
-     "インターネット  →  DNS 解決不可（Public Endpoint 無効）  →  接続不可",
-     "存在しないものとして扱われる。ログイン画面すら表示されない。"),
+steps = [
+    ("①", "オンプレ PC → VPN デバイス",
+     "オンプレ内通信",
+     C_GW_BORDER, C_ONPREM_BG),
+    ("②", "VPN デバイス → VPN Gateway（GatewaySubnet）",
+     "IPsec 暗号化トンネル経由で Azure VNet に入る",
+     C_GW_BORDER, C_GW_BG),
+    ("③④", "VPN GW → PE:Frontend（subnet-pe）→ App Service Frontend",
+     "Private Endpoint がインバウンドを受け、Azure 内部プライベート回線でFrontend に転送。Public 無効のため社外からは DNS 解決すら不可",
+     C_PE_BORDER, C_PE_BG),
+    ("⑤⑥", "Frontend → subnet-integration（出口）→ PE:Backend → App Service Backend",
+     "VNet Integration で subnet-integration を出口として使い、Private DNS が Backend の PE プライベート IP に解決",
+     C_INT_BORDER, C_INT_BG),
+    ("⑦⑧", "Backend → subnet-integration（出口）→ PE:Foundry → Azure AI Foundry",
+     "Managed ID 認証。Backend が Foundry 親エージェントを呼ぶ",
+     C_PURPLE, RGBColor(0xF3,0xE5,0xF5)),
+    ("⑨⑩", "Foundry → PE:Functions（subnet-pe）→ Azure Functions（RAGツール）",
+     "Foundry Managed Network 経由で Functions を呼ぶ。Functions は subnet-func-integration を出口として AI Search へ",
+     C_FUNC_BORDER, C_FUNC_BG),
+    ("⑪⑫", "Functions → subnet-func-integration → PE:AI Search → Azure AI Search → 回答生成",
+     "ベクトル検索結果を Foundry に返す。回答は逆経路で Frontend → オンプレ PC に返る",
+     C_INT_BORDER, RGBColor(0xE8,0xF5,0xE9)),
 ]
 
-for i, (title, flow, note) in enumerate(flows):
-    y = 0.7 + i * 1.5
-    add_rect(slide3, 0.3, y, 12.5, 1.35,
-             RGBColor(0xF5,0xF8,0xFF) if i != 3 else RGBColor(0xFF,0xF0,0xF0),
-             C_AZURE_BLUE if i != 3 else RGBColor(0xC0,0x00,0x00), 1.0)
-    add_textbox(slide3, 0.4, y + 0.05, 12.3, 0.3,
-                title, font_size=11, bold=True,
-                color=C_AZURE_BLUE if i != 3 else RGBColor(0xC0,0x00,0x00),
-                align=PP_ALIGN.LEFT)
-    add_textbox(slide3, 0.4, y + 0.35, 12.3, 0.45,
-                flow, font_size=10, color=C_DARK_TEXT, align=PP_ALIGN.LEFT)
-    add_textbox(slide3, 0.4, y + 0.8, 12.3, 0.4,
-                f"補足: {note}", font_size=8, color=C_GRAY_TEXT, align=PP_ALIGN.LEFT)
+for i, (num, title, desc, tc, bg) in enumerate(steps):
+    y = 0.52 + i * 0.86
+    rect(s3, 0.25, y, 12.8, 0.8, bg, tc, 1.0)
+    txt(s3, 0.28, y+0.04, 0.5, 0.35, num, 13, True, tc)
+    txt(s3, 0.85, y+0.04, 11.8, 0.28, title, 10, True, C_DARK, PP_ALIGN.LEFT)
+    txt(s3, 0.85, y+0.36, 11.8, 0.36, desc, 8.5, False, C_GRAY, PP_ALIGN.LEFT)
+
+txt(s3, 0.25, 7.5-0.28, 12.8, 0.24,
+    "社外からは全 App Service / Functions の Public Endpoint が無効 → DNS 解決不可・存在が見えない",
+    8, False, C_RED)
 
 # ============================================================
 # 保存
 # ============================================================
-out_path = "/home/user/tmp/azure-test-environment/docs/architecture.pptx"
-prs.save(out_path)
-print(f"Saved: {out_path}")
+out = "/home/user/tmp/azure-test-environment/docs/architecture.pptx"
+prs.save(out)
+print(f"Saved: {out}")
