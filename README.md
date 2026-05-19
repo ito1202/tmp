@@ -174,6 +174,196 @@ terraform output functions_principal_id
 
 ---
 
+## 段階的構築（推奨）
+
+いきなり全部を `terraform apply` するのではなく、フェーズごとに確認しながら進めます。  
+各フェーズで `-target` フラグを使い、対象リソースだけを作成します。
+
+> **なぜ段階的にするのか**  
+> 問題が起きたとき「どこで壊れたか」が特定しやすくなるためです。  
+> また VPN Gateway（作成 20〜30 分・月額 $32）など重いリソースは  
+> 後回しにすることでコストと時間を節約できます。
+
+---
+
+### フェーズ 1: ネットワーク基盤
+
+**何をするか**: リソースグループ・VNet・Subnet・NSG を作る。全リソースの土台。
+
+```bash
+terraform apply \
+  -target=azurerm_resource_group.main \
+  -target=azurerm_virtual_network.main \
+  -target=azurerm_subnet.gateway \
+  -target=azurerm_subnet.pe \
+  -target=azurerm_subnet.integration \
+  -target=azurerm_subnet.func_integration \
+  -target=azurerm_network_security_group.app \
+  -target=azurerm_subnet_network_security_group_association.pe
+```
+
+**確認**: Azure Portal でリソースグループ `ito1202` に VNet と Subnet が 4 つ作られていれば OK。
+
+---
+
+### フェーズ 2: Backend App Service（閉域化確認）
+
+**何をするか**: Backend だけを建てて「社外から見えないか」を確認する。  
+これが通れば閉域化の仕組みは正しく動いている。
+
+```bash
+terraform apply \
+  -target=azurerm_service_plan.main \
+  -target=azurerm_linux_web_app.backend \
+  -target=azurerm_app_service_virtual_network_swift_connection.backend \
+  -target=azurerm_private_dns_zone.app_service \
+  -target=azurerm_private_dns_zone_virtual_network_link.app_service \
+  -target=azurerm_private_endpoint.backend
+```
+
+**確認**:
+
+```bash
+# ① プライベート IP が払い出されているか
+terraform output backend_private_ip
+# → 10.0.2.x が返れば OK
+
+# ② 自分の PC（社外扱い）から繋がらないか
+curl https://<app_service_be_name>.azurewebsites.net
+# → 「Could not resolve host」または接続タイムアウト → ✓ 閉じている
+```
+
+---
+
+### フェーズ 3: Frontend App Service
+
+**何をするか**: Frontend を建てて Backend と繋がるか確認する。
+
+```bash
+terraform apply \
+  -target=azurerm_linux_web_app.frontend \
+  -target=azurerm_app_service_virtual_network_swift_connection.frontend \
+  -target=azurerm_private_endpoint.frontend
+```
+
+**確認**:
+
+```bash
+terraform output frontend_private_ip
+# → 10.0.2.x が返れば OK
+```
+
+---
+
+### フェーズ 4: VPN Gateway
+
+**何をするか**: オンプレと Azure を VPN トンネルで繋ぐ。  
+**前提**: オンプレ VPN デバイスの型番・グローバル IP が確定していること。
+
+```bash
+terraform apply \
+  -target=azurerm_public_ip.vpn_gateway \
+  -target=azurerm_virtual_network_gateway.main
+```
+
+> 作成に **20〜30 分** かかります。
+
+作成後、`terraform output vpn_gateway_public_ip` で Azure 側の IP を確認し、  
+オンプレ VPN デバイスに設定します（デバイスのマニュアルを参照）。
+
+その後、`main.tf` の以下のコメントアウトを外して apply します:
+```hcl
+# resource "azurerm_local_network_gateway" "onprem" {}
+# resource "azurerm_virtual_network_gateway_connection" "onprem" {}
+```
+
+**確認**:
+
+```bash
+# VPN 接続後、オンプレ PC から以下が通れば成功
+curl https://<app_service_be_name>.azurewebsites.net
+# → フェーズ 2 では繋がらなかったが、VPN 経由では 200 が返る
+```
+
+---
+
+### フェーズ 5: Azure Functions（RAG ツール）
+
+**何をするか**: Functions を建てて VNet 内の AI Search を呼べる出口を作る。
+
+```bash
+terraform apply \
+  -target=azurerm_service_plan.functions \
+  -target=azurerm_storage_account.functions \
+  -target=azurerm_linux_function_app.main \
+  -target=azurerm_app_service_virtual_network_swift_connection.functions \
+  -target=azurerm_private_endpoint.functions
+```
+
+---
+
+### フェーズ 6: Storage Account・Azure AI Search（RAG 基盤）
+
+**何をするか**: RAG 用のファイル置き場と検索エンジンを建てる。
+
+```bash
+terraform apply \
+  -target=azurerm_storage_account.main \
+  -target=azurerm_private_dns_zone.storage_blob \
+  -target=azurerm_private_dns_zone_virtual_network_link.storage_blob \
+  -target=azurerm_private_endpoint.storage \
+  -target=azurerm_search_service.main \
+  -target=azurerm_private_dns_zone.ai_search \
+  -target=azurerm_private_dns_zone_virtual_network_link.ai_search \
+  -target=azurerm_private_endpoint.ai_search
+```
+
+**確認**: Azure Portal で Storage Account と AI Search が作成されていること。  
+Storage Account に blob コンテナを作成し、テスト用ファイルをアップロードする。
+
+---
+
+### フェーズ 7: 監視（Log Analytics）
+
+**何をするか**: 各リソースのログを一か所に集約する。
+
+```bash
+terraform apply \
+  -target=azurerm_log_analytics_workspace.main \
+  -target=azurerm_monitor_diagnostic_setting.frontend \
+  -target=azurerm_monitor_diagnostic_setting.backend \
+  -target=azurerm_monitor_diagnostic_setting.functions \
+  -target=azurerm_monitor_diagnostic_setting.ai_search
+```
+
+---
+
+### フェーズ 8: Foundry（Foundry リソース確定後）
+
+**何をするか**: Foundry Hub・Project の Private Endpoint を追加する。  
+**前提**: Foundry Hub と Project が Azure Portal で作成済みであること。
+
+`main.tf` のコメントアウトを外してリソース ID を埋めてから apply します:
+```hcl
+# resource "azurerm_private_endpoint" "foundry_hub" { ... }
+# resource "azurerm_private_endpoint" "foundry_project" { ... }
+```
+
+---
+
+### 全フェーズ完了後の追加作業
+
+| 作業 | タイミング |
+|------|-----------|
+| Managed ID へのロール付与 | フェーズ 5・6 完了後 |
+| EntraID App Registration 作成 | フェーズ 3 完了後 |
+| Foundry Managed Network 設定 | フェーズ 8 完了後 |
+| RAG ファイルのアップロード | フェーズ 6 完了後 |
+
+詳細は `docs/iam-design.md` を参照してください。
+
+---
+
 ## よくある注意点
 
 ### tfvars を Git にコミットしない
