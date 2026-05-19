@@ -190,12 +190,23 @@ Functions → Foundry → Backend → Frontend → オンプレ PC
 
 ---
 
+## 確定済み事項
+
+| 項目 | 決定内容 |
+|------|---------|
+| Foundry PE | Hub・Project それぞれに PE が必要。DNS Zone: `privatelink.services.ai.azure.com` |
+| Foundry → Functions 通信 | Foundry Managed Virtual Network + Managed Private Endpoint（Microsoft 管理） |
+| AI Search → Storage 接続 | 同一リージョン（Japan East）のため Shared Private Link 不要。Microsoft backbone 経由で自動プライベート接続 |
+| Flex Consumption 委任名 | `Microsoft.App/environments`（`Microsoft.Web/serverFarms` は不正解） |
+| FE ↔ BE 認証 | EntraID（Bearer トークン）。App Registration を 2 つ作成 |
+| 監視 | Azure Monitor + Log Analytics Workspace（retention 30 日） |
+
+---
+
 ## 未確定事項（TODO）
 
-- [ ] Foundry の Private Link 対応確認（Hub / Project 単位の PE 数・DNS Zone）
-- [ ] Foundry → Azure Functions 通信方式の確定（Foundry マネージドネットワーク設定）
-- [ ] AI Search → Storage のプライベート接続設定（AI Search マネージド PE の要否）
-- [ ] Flex Consumption の Subnet 委任名の最終確認（Microsoft.Web/serverFarms で正しいか）
-- [ ] オンプレ VPN デバイスの型番・設定値
-- [ ] Frontend ↔ Backend 間の認証方式
-- [ ] ログ・監視設計（Azure Monitor / Log Analytics）
+- [ ] オンプレ VPN デバイスの型番・設定値（確定後に `azurerm_local_network_gateway` を追加）
+- [ ] Foundry Hub / Project の Terraform リソース ID 確定後に PE を追加
+- [ ] EntraID App Registration の作成（Client ID / Tenant ID を terraform.tfvars に追記）
+- [ ] EntraID のグループ設計（個人ではなくグループ単位でロールを付与）
+- [ ] 条件付きアクセスポリシーの要否（MFA など）

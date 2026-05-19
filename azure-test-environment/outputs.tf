@@ -47,3 +47,8 @@ output "storage_account_name" {
   description = "Storage Account 名（RAG ファイルアップロード先）"
   value       = azurerm_storage_account.main.name
 }
+
+output "log_analytics_workspace_id" {
+  description = "Log Analytics Workspace ID（監視設定の確認に使用）"
+  value       = azurerm_log_analytics_workspace.main.id
+}

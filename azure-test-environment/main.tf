@@ -67,10 +67,11 @@ resource "azurerm_subnet" "func_integration" {
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = [var.subnet_func_integration_prefix]
 
+  # Flex Consumption の委任名は App Service Plan と異なる
   delegation {
-    name = "functions-delegation"
+    name = "functions-flex-delegation"
     service_delegation {
-      name    = "Microsoft.Web/serverFarms"
+      name    = "Microsoft.App/environments"
       actions = ["Microsoft.Network/virtualNetworks/subnets/action"]
     }
   }
@@ -442,4 +443,76 @@ resource "azurerm_private_endpoint" "functions" {
     name                 = "dns-group-functions"
     private_dns_zone_ids = [azurerm_private_dns_zone.app_service.id]
   }
+}
+
+# ============================================================
+# Azure AI Foundry — Private Endpoint
+# Hub と Project それぞれに PE が必要
+# ============================================================
+resource "azurerm_private_dns_zone" "foundry" {
+  name                = "privatelink.services.ai.azure.com"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "foundry" {
+  name                  = "dns-link-foundry"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.foundry.name
+  virtual_network_id    = azurerm_virtual_network.main.id
+  tags                  = var.tags
+}
+
+# TODO: Foundry Hub / Project リソースが確定したら PE を追加
+# resource "azurerm_private_endpoint" "foundry_hub" { ... }
+# resource "azurerm_private_endpoint" "foundry_project" { ... }
+
+# ============================================================
+# Log Analytics Workspace（Azure Monitor）
+# ============================================================
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "law-${var.resource_group_name}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+  tags                = var.tags
+}
+
+resource "azurerm_monitor_diagnostic_setting" "frontend" {
+  name                       = "diag-frontend"
+  target_resource_id         = azurerm_linux_web_app.frontend.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log { category = "AppServiceHTTPLogs" }
+  enabled_log { category = "AppServiceAppLogs" }
+  metric { category = "AllMetrics" }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "backend" {
+  name                       = "diag-backend"
+  target_resource_id         = azurerm_linux_web_app.backend.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log { category = "AppServiceHTTPLogs" }
+  enabled_log { category = "AppServiceAppLogs" }
+  metric { category = "AllMetrics" }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "functions" {
+  name                       = "diag-functions"
+  target_resource_id         = azurerm_linux_function_app.main.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log { category = "FunctionAppLogs" }
+  metric { category = "AllMetrics" }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "ai_search" {
+  name                       = "diag-ai-search"
+  target_resource_id         = azurerm_search_service.main.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log { category = "OperationLogs" }
+  metric { category = "AllMetrics" }
 }
