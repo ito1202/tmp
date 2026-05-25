@@ -28,8 +28,10 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
 nvm install 24
 nvm use 24
 
-# Windows (winget)
-winget install OpenJS.NodeJS.LTS
+# Windows Server — 公式インストーラーをダウンロード
+# https://nodejs.org/en/download から LTS (.msi) を取得して実行
+# または Chocolatey が導入済みであれば:
+choco install nodejs-lts -y
 ```
 
 ---
