@@ -1,0 +1,13 @@
+{
+  "agent": {
+    "model": "openai/<your-deployment-name>"
+  },
+  "models": {
+    "providers": {
+      "openai": {
+        "baseUrl": "https://<your-resource-name>.openai.azure.com",
+        "apiKey": "<your-azure-openai-api-key>"
+      }
+    }
+  }
+}
