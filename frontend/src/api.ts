@@ -43,6 +43,19 @@ export async function uploadFile(file: File): Promise<UploadResult> {
   return res.json();
 }
 
+export async function chatSimple(
+  messages: { role: string; content: string; file_ids: string[] }[],
+  threadId: string | null
+): Promise<{ thread_id: string; content: string }> {
+  const res = await fetch("/api/chat/simple", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, thread_id: threadId }),
+  });
+  if (!res.ok) throw new Error("Chat request failed");
+  return res.json();
+}
+
 export async function* streamChat(
   messages: { role: string; content: string; file_ids: string[] }[],
   threadId: string | null,
