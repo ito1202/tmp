@@ -1,0 +1,11 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfplan
+crash.log
+
+# 機密値を含む可能性があるファイル
+terraform.tfvars
+*.auto.tfvars
