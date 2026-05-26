@@ -34,24 +34,3 @@ async def chat(req: ChatRequest):
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-@router.post("/chat/simple")
-async def chat_simple(req: ChatRequest):
-    """通常レスポンス（JSON一括返却）"""
-    thread = storage.get_or_create_thread(req.thread_id)
-    thread_id = thread.id
-
-    if req.messages:
-        last = req.messages[-1]
-        storage.save_message(thread_id, "user", last.content, last.file_ids)
-
-    file_ids = req.messages[-1].file_ids if req.messages else []
-    chunks: list[str] = []
-    async for chunk in llm_service.stream(req.messages, file_ids):
-        chunks.append(chunk)
-
-    content = "".join(chunks)
-    storage.save_message(thread_id, "assistant", content)
-
-    return {"thread_id": thread_id, "content": content}
